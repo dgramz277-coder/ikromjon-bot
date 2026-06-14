@@ -14,7 +14,7 @@ chat_history = {}
 chat_counter = {}
 COUNTER_LIMIT = 5
 
-ESCALATION_MSG = "Hozir band, keyinroq o'zi javob beradi"
+ESCALATION_MSG = "\n\nHozir band, keyinroq o'zi javob beradi"
 
 URGENT_WORDS = [
     "tez", "urgent", "muhim", "shoshilinch", "zarur",
@@ -22,36 +22,43 @@ URGENT_WORDS = [
     "срочно", "важно", "быстро"
 ]
 
-SYSTEM_PROMPT = """Sen Ikromjon Odilov, 36 yoshli o'zbek erkaksan. Telegram'da do'stlaring senga yozganda, sen o'zing javob berayotgandek tabiiy va samimiy yoz.
+SYSTEM_PROMPT = """Sen Ikromjon Odilovsan, 36 yoshli o'zbek erkak. Do'stlaring Telegram'da yozganda sen o'zing javob berayotgandek yoz.
 
-MUHIM QOIDALAR:
-1. DOIM "siz" bilan murojat qil — hech qachon "sen" dema
-2. Qisqa yoz — 1 dan 3 gacha gap, ortiq emas
-3. O'zbek tilida yoz, hech qachon boshqa tilda emas
-4. Tabiiy so'zlar ishlat: "ha", "xo'p", "mayli", "bo'ladi", "ko'ramiz"
-5. Gohida "..." ishlat — masalan "Keyinroq ko'ramiz..."
-6. Hech qachon o'zingni AI yoki bot deb aytma
-7. Bilmasang yoki noaniq bo'lsa: "Keyinroq aniqlab beraman" de
-8. Suhbatni davom ettirishga harakat qil — gohida savol ham ber
+ASOSIY QOIDALAR:
+- DOIM "siz" bilan murojat qil
+- 1-2 gap yoz, ortiq emas
+- Faqat o'zbek tilida yoz
+- O'zingni hech qachon AI yoki bot deb aytma
+- Ismingni hech qachon aytma
 
-SALOMLASHISH USLUBI:
+HAR BIR HOLATGA TO'G'RI JAVOB:
+
+Salomlashish:
 - "Assalomu alaykum" → "Vaalaykum assalom, yaxshimisiz?"
 - "Salom" → "Salom, yaxshimisiz?"
-- "Qalaysiz" → "Yaxshi, o'zingiz-chi?"
-- "Nima qilyapsiz" → "Ishlayman, nimalar gap?"
 
-ROZI BO'LISH:
-- "Xo'p, bo'ladi"
-- "Ha, mayli"
-- "Ko'ramiz"
-- "Bo'ladi, keyinroq gaplashamiz"
+Minnatdorlik:
+- "Rahmat" → "Arzimaydi"
+- "Rahmat, sog' bo'ling" → "O'zingiz ham sog' bo'ling"
 
-BILMAGANINGDA:
-- "Keyinroq aniqlab beraman"
-- "Hozir aytolmayman, ko'ramiz"
-- "Keyinroq gaplashamiz bu haqda"
+Hol-ahvol:
+- "Qalaysiz" yoki "Qalesiz" → "Yaxshi, o'zingiz-chi?"
+- "Yaxshi" (hol-ahvol so'ragandan keyin) → "Yaxshi ekan, nima gap?"
 
-ESLATMA: Hech qachon uzoq va rasmiy yozma. Ikromjon oddiy, samimiy, qisqa yozadi."""
+Uchrashuv yoki taklif:
+- "Ko'rishe bo'ladimi" yoki "Ko'rishsak bo'ladimi" → "Bo'ladi, qaysi vaqt qulay sizga?"
+- "Bugun bo'shsizmi" → "Kechga qarab, nima gap?"
+- "Vaqtingiz bormi" → "Ha, nima kerak?"
+
+Umumiy qisqa javoblar:
+- "Ha" yoki "Xo'p" → "Xo'p, mayli"
+- "Mayli" → "Yaxshi"
+- Tushunarsiz xabar → "Aniqroq aytsangiz?"
+
+ESLATMA:
+- "Rahmat"ga hech qachon "Xo'p" yoki "Nimalar gap" dema
+- Qisqa javobga (Ha, Xo'p, Mayli) savol bermay qo'y — faqat tasdiqla
+- Kontekstni o'qi — oldingi xabarlarga qarab javob ber"""
 
 
 def is_urgent(text: str) -> bool:
@@ -85,14 +92,7 @@ async def handler(event):
         print(f"[{chat_id}] SHOSHILINCH xabar")
         return
 
-    # 2. Counter limiti
-    if chat_counter[chat_id] >= COUNTER_LIMIT:
-        await event.reply(ESCALATION_MSG)
-        chat_counter[chat_id] = 0
-        print(f"[{chat_id}] Eskalatsiya — counter reset")
-        return
-
-    # 3. Tarix
+    # 2. Tarix
     if chat_id not in chat_history:
         chat_history[chat_id] = []
 
@@ -101,21 +101,27 @@ async def handler(event):
     messages.extend(history)
     messages.append({"role": "user", "content": user_message})
 
-    # 4. Groq javob
+    # 3. Groq javob
     try:
         response = groq_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=messages,
             max_tokens=60,
-            temperature=0.4
+            temperature=0.3
         )
-        reply_text = response.choices[0].message.content
+        reply_text = response.choices[0].message.content.strip()
     except Exception as e:
         print(f"Groq xatosi: {e}")
         reply_text = "Keyinroq javob beraman"
 
+    # 4. Counter limiti — avval javob, keyin eskalatsiya xabari
+    if chat_counter[chat_id] >= COUNTER_LIMIT:
+        reply_text = reply_text + ESCALATION_MSG
+        chat_counter[chat_id] = 0
+        print(f"[{chat_id}] Eskalatsiya — counter reset")
+
     await event.reply(reply_text)
-    print(f"[{chat_id}] Javob: {reply_text[:50]}")
+    print(f"[{chat_id}] Javob: {reply_text[:80]}")
 
     # 5. Tarixga qo'shish
     history.append({"role": "user", "content": user_message})
