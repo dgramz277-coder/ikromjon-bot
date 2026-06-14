@@ -12,8 +12,10 @@ client = TelegramClient('ikromjon_session', API_ID, API_HASH)
 
 @client.on(events.NewMessage(incoming=True))
 async def handler(event):
+    print(f"XABAR KELDI: {event.text} | Private: {event.is_private}")
     if event.is_private:
         user_message = event.text
+        print(f"XABAR KELDI: {user_message}")
         response = groq_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
