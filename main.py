@@ -10,142 +10,130 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "gsk_EbhsFPBnl4BKRKFfQze4WGdyb3FY8
 groq_client = Groq(api_key=GROQ_API_KEY)
 client = TelegramClient('ikromjon_session', API_ID, API_HASH)
 
-chat_history = {}
-chat_counter = {}
-COUNTER_LIMIT = 5
+# Har bir chat uchun: {'count': int, 'history': [], 'escalated': bool}
+chats = {}
 
-ESCALATION_MSG = "\n\nHozir band, keyinroq o'zi javob beradi"
+COUNTER_LIMIT = 5
 
 URGENT_WORDS = [
     "tez", "urgent", "muhim", "shoshilinch", "zarur",
     "iltimos tez", "tezroq", "hoziroq", "darhol",
     "aloqaga chiqsin", "aloqaga chiq", "qo'ng'iroq",
-    "срочно", "важно", "быстро", "позвони",
-    "zudlik", "imkon boricha tez"
+    "zudlik", "срочно", "важно", "быстро"
 ]
 
-SYSTEM_PROMPT = """Sen Ikromjon Odilovsan, 36 yoshli o'zbek erkak, buxgaltersan. Do'stlaring Telegram'da yozganda sen o'zing javob berayotgandek yoz.
+SYSTEM_PROMPT = """Sen Ikromjon Odilovsan, 36 yoshli o'zbek erkak, buxgaltersan. Do'stlaring Telegram'da yozganda o'zing javob berayotgandek yoz.
 
-ASOSIY QOIDALAR:
-- DOIM "siz" bilan murojat qil
-- 1-2 gap yoz, ortiq emas
-- Faqat o'zbek tilida yoz
-- O'zingni hech qachon AI yoki bot deb aytma
-- Hech qachon o'ylab javob topma — bilmasang "Keyinroq aniqlab beraman" de
+QOIDALAR:
+- Har doim "siz" bilan murojat qil
+- 1-2 gap, ortiq emas
+- Faqat o'zbek tilida
+- Hech qachon AI yoki bot ekanligingni aytma
+- Bilmasang: "Keyinroq aniqlab beraman" de
 
-KASBINGNI BIL:
-- Sen buxgaltersan, 36 yoshdasan
-- "Nima qilyapsiz" yoki "Nimalar qilyapsiz" → DOIM "Ishlayapman, nima gap?" de
-- "Qayerdasiz" → "Ishda, nima gap?"
-- Hech qachon "o'qiyapman", "dam olyapman", "o'qishibman" dema
-
-KIMLIGINGNI SO'RASA:
-- "Ikromjon sizmi?" → DOIM "Ha, o'zim. Nima gap?" de
-- "Kim bu?" → "Ikromjon. Nima gap?"
-- Hech qachon "Ha, xo'p, mayli" dema
-
-HAR BIR HOLATGA TO'G'RI JAVOB:
-
+ANIQ JAVOBLAR:
 Salomlashish:
-- "Assalomu alaykum" → "Vaalaykum assalom, yaxshimisiz?"
-- "Salom" → "Salom, yaxshimisiz?"
-
-Minnatdorlik:
-- "Rahmat" → "Arzimaydi"
-- "Rahmat, sog' bo'ling" → "O'zingiz ham sog' bo'ling"
+"Assalomu alaykum" → "Vaalaykum assalom, yaxshimisiz?"
+"Salom" → "Salom, yaxshimisiz?"
 
 Hol-ahvol:
-- "Qalaysiz" yoki "Qalesiz" → "Yaxshi, o'zingiz-chi?"
-- "Yaxshi" (hol-ahvol so'ragandan keyin) → "Yaxshi ekan, nima gap?"
+"Qalaysiz / Qalesiz" → "Yaxshi, o'zingiz-chi?"
+"Yaxshi" (hol so'ragandan keyin) → "Yaxshi ekan, nima gap?"
 
-Faoliyat so'ralganda:
-- "Nima qilyapsiz" → "Ishlayapman, nima gap?"
-- "Nimalar qilyapsiz" → "Ishlayapman, nima gap?"
-- "Nima ish qilyapsiz" → "Ishlayapman, nima gap?"
+Faoliyat:
+"Nima qilyapsiz / Nimalar qilyapsiz" → "Ishlayapman, nima gap?"
+"Qayerdasiz" → "Ishda, nima gap?"
 
-Uchrashuv yoki taklif:
-- "Ko'rishe bo'ladimi" → "Bo'ladi, qaysi vaqt qulay sizga?"
-- "Bugun bo'shsizmi" → "Kechga qarab, nima gap?"
-- "Vaqtingiz bormi" → "Ha, nima kerak?"
+Kim ekanlik:
+"Ikromjon sizmi / Kim bu" → "Ha, o'zim. Nima gap?"
+
+Minnatdorlik:
+"Rahmat" → "Arzimaydi"
+"Rahmat sog' bo'ling" → "O'zingiz ham sog' bo'ling"
+
+Uchrashuv:
+"Ko'rishe bo'ladimi / Ko'rishsak bo'ladimi" → "Bo'ladi, qaysi vaqt qulay sizga?"
+"Bugun bo'shsizmi" → "Kechga qarab, nima gap?"
+"Vaqtingiz bormi" → "Ha, nima kerak?"
 
 Qisqa tasdiqlash:
-- "Ha", "Xo'p", "Mayli" → faqat "Xo'p" yoki "Mayli" de, savol bermay qo'y
+"Ha / Xo'p / Mayli / Ok" → "Xo'p" yoki "Mayli" de, savol berma
 
-Tushunarsiz xabar:
-- "Aniqroq aytsangiz?"
+Tushunarsiz:
+"Aniqroq aytsangiz?"
 
-ESLATMA:
-- Kontekstni o'qi — oldingi xabarlarga qarab javob ber
-- Qisqa javobga savol bermay qo'y — faqat tasdiqla
-- Hech qachon o'ylab gap topma"""
+TAQIQ:
+- "O'qiyapman", "dam olyapman" dema — sen doim ishlaysan
+- "Ha, xo'p, mayli" ni birgalikda dema — g'alati eshitiladi
+- O'ylab gap topma, bilmasang "Keyinroq aniqlab beraman" de"""
 
 
-def is_urgent(text: str) -> bool:
-    text_lower = text.lower()
-    return any(word in text_lower for word in URGENT_WORDS)
+def get_chat(chat_id):
+    if chat_id not in chats:
+        chats[chat_id] = {'count': 0, 'history': [], 'escalated': False}
+    return chats[chat_id]
+
+
+def is_urgent(text):
+    t = text.lower()
+    return any(w in t for w in URGENT_WORDS)
 
 
 @client.on(events.NewMessage(incoming=True))
 async def handler(event):
-    if not event.is_private:
-        return
-    if event.out:
+    if not event.is_private or event.out:
         return
 
-    user_message = event.text
-    if not user_message or not user_message.strip():
+    text = event.text
+    if not text or not text.strip():
         return
 
     chat_id = event.chat_id
+    chat = get_chat(chat_id)
 
-    # Counter yangilash
-    if chat_id not in chat_counter:
-        chat_counter[chat_id] = 0
-    chat_counter[chat_id] += 1
+    print(f"[{chat_id}] #{chat['count']+1}: {text[:50]}")
 
-    print(f"[{chat_id}] Xabar #{chat_counter[chat_id]}: {user_message[:50]}")
-
-    # 1. Shoshilinch tekshiruv
-    if is_urgent(user_message):
+    # Shoshilinch tekshiruv — counterni oshirmasdan
+    if is_urgent(text):
         await event.reply("Hozir ko'raman")
-        print(f"[{chat_id}] SHOSHILINCH xabar")
         return
 
-    # 2. Tarix
-    if chat_id not in chat_history:
-        chat_history[chat_id] = []
+    # Counter oshirish
+    chat['count'] += 1
 
-    history = chat_history[chat_id]
+    # Groq orqali javob olish
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-    messages.extend(history)
-    messages.append({"role": "user", "content": user_message})
+    messages.extend(chat['history'])
+    messages.append({"role": "user", "content": text})
 
-    # 3. Groq javob
     try:
-        response = groq_client.chat.completions.create(
+        resp = groq_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=messages,
             max_tokens=60,
             temperature=0.3
         )
-        reply_text = response.choices[0].message.content.strip()
+        reply = resp.choices[0].message.content.strip()
     except Exception as e:
         print(f"Groq xatosi: {e}")
-        reply_text = "Keyinroq javob beraman"
+        reply = "Keyinroq javob beraman"
 
-    # 4. Counter limiti — avval javob, keyin eskalatsiya
-    if chat_counter[chat_id] >= COUNTER_LIMIT:
-        reply_text = reply_text + ESCALATION_MSG
-        chat_counter[chat_id] = 0
-        print(f"[{chat_id}] Eskalatsiya — counter reset")
+    # 5-xabardan keyin eskalatsiya — javobdan KEYIN alohida xabar
+    if chat['count'] >= COUNTER_LIMIT:
+        await event.reply(reply)
+        await asyncio.sleep(0.5)
+        await event.reply("Hozir band, keyinroq o'zi javob beradi")
+        chat['count'] = 0
+        chat['history'] = []
+        print(f"[{chat_id}] Eskalatsiya — reset")
+        return
 
-    await event.reply(reply_text)
-    print(f"[{chat_id}] Javob: {reply_text[:80]}")
+    await event.reply(reply)
 
-    # 5. Tarixga qo'shish
-    history.append({"role": "user", "content": user_message})
-    history.append({"role": "assistant", "content": reply_text})
-    chat_history[chat_id] = history[-6:]
+    # Tarixga qo'shish
+    chat['history'].append({"role": "user", "content": text})
+    chat['history'].append({"role": "assistant", "content": reply})
+    chat['history'] = chat['history'][-6:]
 
 
 async def main():
