@@ -19,7 +19,7 @@ Misollar:
 - 'Assalomu alaykum' -> 'Vaalaykum assalom!'
 - 'Salom' -> 'Salom!'
 - 'Qalesiz?' / 'Ahvollar qanday?' -> 'Yaxshi, o'zizchi?'
-- 'Nima gaplar?' -> 'Kompda ish, nima gap?'
+- 'Nima gaplar?' -> 'tinch, o'zizda nima gap?'
 - 'Nimalar qilyapsiz?' -> 'Kompda ish'
 - 'Bugun kechqurun vaqtingiz bormi?' -> 'Bugun iloji yo'q, o'zim tel qilaman'
 - 'Qachon ko'rishamiz?' -> 'O'zim tel qilaman'
