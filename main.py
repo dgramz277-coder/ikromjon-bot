@@ -1,9 +1,7 @@
 import asyncio
 from telethon import TelegramClient, events
-from telethon.tl.functions.users import GetFullUserRequest
 from groq import Groq
 import os
-import time
 
 API_ID = 30016241
 API_HASH = "64d181db851329f58ccd8117d5ec141a"
@@ -12,16 +10,12 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "gsk_EbhsFPBnl4BKRKFfQze4WGdyb3FY8
 groq_client = Groq(api_key=GROQ_API_KEY)
 client = TelegramClient('ikromjon_session', API_ID, API_HASH)
 
+# Bot holati — boshlanganda o'chiq
+bot_active = False
+
 # Har bir chat uchun ma'lumot
 chats = {}
 COUNTER_LIMIT = 5
-
-# Offline deb hisoblash uchun kutish vaqti (soniya)
-# Siz oxirgi faollikdan 5 daqiqa o'tsa — offline hisoblanadi
-OFFLINE_AFTER_SECONDS = 300  # 5 daqiqa
-
-# Sizning oxirgi faollik vaqtingiz
-last_online = {'time': 0}
 
 URGENT_WORDS = [
     "tez", "urgent", "muhim", "shoshilinch", "zarur",
@@ -78,7 +72,7 @@ TAQIQ:
 
 def get_chat(chat_id):
     if chat_id not in chats:
-        chats[chat_id] = {'count': 0, 'history': [], }
+        chats[chat_id] = {'count': 0, 'history': []}
     return chats[chat_id]
 
 
@@ -87,18 +81,27 @@ def is_urgent(text):
     return any(w in t for w in URGENT_WORDS)
 
 
-def am_i_offline():
-    """5 daqiqadan ko'p faol bo'lmagan bo'lsam — offline"""
-    if last_online['time'] == 0:
-        return True
-    return (time.time() - last_online['time']) > OFFLINE_AFTER_SECONDS
+# /on va /off — faqat o'zingizning xabarlaringiz
+@client.on(events.NewMessage(outgoing=True, pattern='/on'))
+async def turn_on(event):
+    global bot_active
+    bot_active = True
+    await event.reply("✅ Bot yoqildi — endi javob beradi")
+    print("Bot YOQILDI")
 
 
-# Sizning xabarlaringizni kuzatib, online vaqtni yangilaymiz
-@client.on(events.NewMessage(outgoing=True))
-async def track_online(event):
-    last_online['time'] = time.time()
-    print(f"Online vaqt yangilandi")
+@client.on(events.NewMessage(outgoing=True, pattern='/off'))
+async def turn_off(event):
+    global bot_active
+    bot_active = False
+    await event.reply("🔴 Bot o'chirildi — siz javob berasiz")
+    print("Bot O'CHIRILDI")
+
+
+@client.on(events.NewMessage(outgoing=True, pattern='/status'))
+async def status(event):
+    holat = "✅ Yoqiq — javob beryapti" if bot_active else "🔴 O'chiq — siz javob berasiz"
+    await event.reply(f"Bot holati: {holat}")
 
 
 @client.on(events.NewMessage(incoming=True))
@@ -110,13 +113,12 @@ async def handler(event):
     if not text or not text.strip():
         return
 
-    chat_id = event.chat_id
-
-    # Agar siz online bo'lsangiz — bot jim turadi
-    if not am_i_offline():
-        print(f"[{chat_id}] Siz onlinesiz — bot jim")
+    # Bot o'chiq bo'lsa — jim turadi
+    if not bot_active:
+        print(f"Bot o'chiq — javob berilmadi")
         return
 
+    chat_id = event.chat_id
     chat = get_chat(chat_id)
     print(f"[{chat_id}] #{chat['count']+1}: {text[:50]}")
 
@@ -166,7 +168,7 @@ async def handler(event):
 async def main():
     await client.start()
     print("✅ Ikromjon bot ishga tushdi!")
-    print(f"Offline vaqt: {OFFLINE_AFTER_SECONDS} soniya ({OFFLINE_AFTER_SECONDS//60} daqiqa)")
+    print("Boshqaruv: /on — yoqish | /off — o'chirish | /status — holat")
     await client.run_until_disconnected()
 
 
